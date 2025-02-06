@@ -180,3 +180,11 @@ body {
     font-size: 1.1rem;
     line-height: 1.5;
 }
+
+.welcome-message {
+    font-size: 1.2em;
+    color: #2196F3;
+    margin: 10px 0;
+    text-align: center;
+    font-weight: bold;
+}
