@@ -11,11 +11,14 @@
     <div class="container">
         <div id="points-container">
             <h1>نظام النقاط</h1>
+            <div class="welcome-message">
+                مرحباً <span id="user-name">عزيزي المستخدم</span>!
+            </div>
             <div class="points-display">
                 <span>نقاطك الحالية:</span>
                 <span id="points-value">0</span>
             </div>
-            <button id="increment-btn" class="btn btn-primary">جمع نقطة</button>
+            <button id="increment-btn" class="btn btn-primary">جمع نقطة! 🎯</button>
         </div>
     </div>
 
@@ -23,6 +26,30 @@
         let tg = window.Telegram.WebApp;
         tg.expand();
 
+        // تحديث النقاط
+        async function updatePoints() {
+            try {
+                const response = await fetch('/get_points', {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Telegram-ID': tg.initDataUnsafe.user.id
+                    }
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'حدث خطأ ما');
+                }
+
+                const data = await response.json();
+                document.getElementById('points-value').textContent = data.points;
+                document.getElementById('user-name').textContent = data.name;
+            } catch (error) {
+                tg.showAlert(error.message);
+            }
+        }
+
+        // زيادة النقاط
         document.getElementById('increment-btn').addEventListener('click', async function() {
             try {
                 const response = await fetch('/increment_points', {
@@ -47,20 +74,7 @@
         });
 
         // تحديث النقاط عند فتح الصفحة
-        fetch('/increment_points', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Telegram-ID': tg.initDataUnsafe.user.id
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            document.getElementById('points-value').textContent = data.points;
-        })
-        .catch(error => {
-            console.error('Error:', error);
-        });
+        updatePoints();
     </script>
 </body>
 </html>
