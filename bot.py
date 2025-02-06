@@ -4,6 +4,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from main_sqlalch import UserDB
 import os
+import hmac
+import hashlib
+import time
 
 # Database setup
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./points.db")
@@ -32,11 +35,28 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             db.add(db_user)
             db.commit()
             db.refresh(db_user)
-            await update.message.reply_text(f'مرحباً {user.first_name}! تم إنشاء حسابك بنجاح.\nاستخدم الأمر /نقاط لمعرفة عدد نقاطك.')
+            welcome_message = f'مرحباً {user.first_name}! تم إنشاء حسابك بنجاح.\n'
         else:
-            await update.message.reply_text(f'مرحباً {user.first_name}! حسابك موجود بالفعل.\nاستخدم الأمر /نقاط لمعرفة عدد نقاطك.')
+            welcome_message = f'مرحباً {user.first_name}! حسابك موجود بالفعل.\n'
+
+        # إنشاء رابط مخصص للمستخدم
+        app_url = os.getenv("APP_URL", "https://your-render-app-url.onrender.com")
+        user_token = generate_user_token(db_user.telegram_id)
+        user_url = f"{app_url}/?token={user_token}"
+        
+        welcome_message += f'يمكنك الوصول إلى لوحة النقاط الخاصة بك من خلال الرابط التالي:\n{user_url}'
+        
+        await update.message.reply_text(welcome_message)
     finally:
         db.close()
+
+def generate_user_token(telegram_id: int) -> str:
+    """إنشاء توكن مشفر للمستخدم"""
+    secret_key = os.getenv("BOT_TOKEN", "").encode()
+    timestamp = int(time.time())
+    data = f"{telegram_id}:{timestamp}"
+    signature = hmac.new(secret_key, data.encode(), hashlib.sha256).hexdigest()
+    return f"{data}:{signature}"
 
 async def points(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send user's points when the command /نقاط is issued."""
