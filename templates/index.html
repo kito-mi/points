@@ -10,6 +10,7 @@
 <body>
     <div class="header">
         <h1>نظام النقاط</h1>
+        <div id="welcomeMessage" class="welcome-message"></div>
     </div>
 
     <div class="container">
@@ -24,6 +25,19 @@
     </div>
 
     <script>
+        // التأكد من تهيئة Telegram WebApp
+        if (window.Telegram && window.Telegram.WebApp) {
+            window.Telegram.WebApp.ready();
+            
+            // عرض رسالة الترحيب
+            const user = window.Telegram.WebApp.initDataUnsafe?.user;
+            if (user) {
+                const welcomeDiv = document.getElementById('welcomeMessage');
+                const name = user.first_name || user.username || 'عزيزي المستخدم';
+                welcomeDiv.textContent = `مرحباً ${name}!`;
+            }
+        }
+
         // عرض رسالة للمستخدم
         function showMessage(message, type) {
             const messageDiv = document.getElementById('message');
@@ -38,11 +52,20 @@
         // زيادة النقاط
         async function incrementPoints() {
             try {
+                // التأكد من وجود معرف المستخدم
+                const user = window.Telegram.WebApp.initDataUnsafe?.user;
+                if (!user || !user.id) {
+                    showMessage('لم نتمكن من التعرف على هويتك. يرجى استخدام البوت أولاً.', 'error');
+                    return;
+                }
+
+                console.log('Sending request with user ID:', user.id); // للتشخيص
+
                 const response = await fetch('/increment_points', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-Telegram-ID': window.Telegram.WebApp.initDataUnsafe.user.id.toString()
+                        'X-Telegram-ID': user.id.toString()
                     }
                 });
 
@@ -52,8 +75,10 @@
                 } else {
                     const error = await response.json();
                     showMessage(error.detail || 'حدث خطأ ما', 'error');
+                    console.error('Server error:', error); // للتشخيص
                 }
             } catch (error) {
+                console.error('Error:', error); // للتشخيص
                 showMessage('حدث خطأ في الاتصال', 'error');
             }
         }
