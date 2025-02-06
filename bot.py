@@ -14,8 +14,29 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Send a message when the command /start is issued."""
-    await update.message.reply_text('مرحباً! استخدم الأمر /نقاط لمعرفة عدد نقاطك.')
+    """إنشاء حساب جديد عند بدء المحادثة مع البوت"""
+    user = update.effective_user
+    db = SessionLocal()
+    try:
+        # التحقق من وجود المستخدم
+        db_user = db.query(UserDB).filter(UserDB.telegram_id == user.id).first()
+        if not db_user:
+            # إنشاء مستخدم جديد
+            db_user = UserDB(
+                telegram_id=user.id,
+                username=user.username,
+                first_name=user.first_name,
+                last_name=user.last_name,
+                points=0
+            )
+            db.add(db_user)
+            db.commit()
+            db.refresh(db_user)
+            await update.message.reply_text(f'مرحباً {user.first_name}! تم إنشاء حسابك بنجاح.\nاستخدم الأمر /نقاط لمعرفة عدد نقاطك.')
+        else:
+            await update.message.reply_text(f'مرحباً {user.first_name}! حسابك موجود بالفعل.\nاستخدم الأمر /نقاط لمعرفة عدد نقاطك.')
+    finally:
+        db.close()
 
 async def points(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send user's points when the command /نقاط is issued."""
