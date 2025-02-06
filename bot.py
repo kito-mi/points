@@ -36,20 +36,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             db.add(db_user)
             db.commit()
-            welcome_message = "مرحباً بك في نظام النقاط! 🎉"
+            welcome_message = f"مرحباً {user.first_name}! 👋\nتم إنشاء حسابك بنجاح! 🎉"
         else:
-            welcome_message = "مرحباً بك مرة أخرى! 👋"
+            welcome_message = f"مرحباً {user.first_name}! 👋\nحسابك موجود ورصيدك الحالي {db_user.points} نقطة 🌟"
 
-        # إنشاء زر للوصول إلى الموقع
+        # إرسال رسالة الترحيب أولاً
+        await update.message.reply_text(welcome_message)
+
+        # ثم إرسال زر الوصول إلى الموقع
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton(
-                "فتح صفحة النقاط 🎯",
+                "اضغط هنا لبدء جمع النقاط! 🎯",
                 web_app=WebAppInfo(url=APP_URL)
             )]
         ])
 
         await update.message.reply_text(
-            f"{welcome_message}\nاضغط على الزر أدناه للوصول إلى صفحة النقاط الخاصة بك.",
+            "اضغط على الزر أدناه لبدء جمع النقاط! 🚀",
             reply_markup=keyboard
         )
     except Exception as e:
@@ -66,7 +69,10 @@ async def points(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         db_user = db.query(UserDB).filter(UserDB.telegram_id == user.id).first()
         if db_user:
-            await update.message.reply_text(f"رصيدك الحالي: {db_user.points} نقطة 🌟")
+            await update.message.reply_text(
+                f"مرحباً {user.first_name}! 👋\n"
+                f"رصيدك الحالي: {db_user.points} نقطة 🌟"
+            )
         else:
             await update.message.reply_text("لم يتم العثور على حسابك. الرجاء استخدام الأمر /start أولاً")
     finally:
@@ -83,3 +89,6 @@ def main():
     
     # تشغيل البوت
     app.run_polling()
+
+if __name__ == "__main__":
+    main()
