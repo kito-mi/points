@@ -1,14 +1,15 @@
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from main_sqlalch import UserDB
 import os
-import hmac
-import hashlib
-import time
+from main_sqlalch import UserDB
 
-# Database setup
+# قراءة المتغيرات البيئية
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+APP_URL = os.getenv("APP_URL", "http://localhost:8000")
+
+# إعداد قاعدة البيانات
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./points.db")
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
@@ -17,9 +18,10 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """إنشاء حساب جديد عند بدء المحادثة مع البوت"""
+    """معالجة أمر /start"""
     user = update.effective_user
     db = SessionLocal()
+    
     try:
         # التحقق من وجود المستخدم
         db_user = db.query(UserDB).filter(UserDB.telegram_id == user.id).first()
@@ -34,59 +36,50 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             db.add(db_user)
             db.commit()
-            db.refresh(db_user)
-            welcome_message = f'مرحباً {user.first_name}! تم إنشاء حسابك بنجاح.\n'
+            welcome_message = "مرحباً بك في نظام النقاط! 🎉"
         else:
-            welcome_message = f'مرحباً {user.first_name}! حسابك موجود بالفعل.\n'
+            welcome_message = "مرحباً بك مرة أخرى! 👋"
 
-        # إنشاء رابط مخصص للمستخدم
-        app_url = os.getenv("APP_URL", "https://your-render-app-url.onrender.com")
-        user_token = generate_user_token(db_user.telegram_id)
-        user_url = f"{app_url}/?token={user_token}"
-        
-        welcome_message += f'يمكنك الوصول إلى لوحة النقاط الخاصة بك من خلال الرابط التالي:\n{user_url}'
-        
-        await update.message.reply_text(welcome_message)
+        # إنشاء زر للوصول إلى الموقع
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton(
+                "فتح صفحة النقاط 🎯",
+                web_app=WebAppInfo(url=APP_URL)
+            )]
+        ])
+
+        await update.message.reply_text(
+            f"{welcome_message}\nاضغط على الزر أدناه للوصول إلى صفحة النقاط الخاصة بك.",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        await update.message.reply_text("عذراً، حدث خطأ ما. الرجاء المحاولة مرة أخرى.")
+        print(f"Error in start command: {str(e)}")
     finally:
         db.close()
 
-def generate_user_token(telegram_id: int) -> str:
-    """إنشاء توكن مشفر للمستخدم"""
-    secret_key = os.getenv("BOT_TOKEN", "").encode()
-    timestamp = int(time.time())
-    data = f"{telegram_id}:{timestamp}"
-    signature = hmac.new(secret_key, data.encode(), hashlib.sha256).hexdigest()
-    return f"{data}:{signature}"
-
 async def points(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Send user's points when the command /نقاط is issued."""
-    user_id = update.effective_user.id
-    
-    # Get user points from database
+    """معالجة أمر /points"""
+    user = update.effective_user
     db = SessionLocal()
+    
     try:
-        user = db.query(UserDB).filter(UserDB.telegram_id == user_id).first()
-        if user:
-            await update.message.reply_text(f'عدد نقاطك الحالي: {user.points}')
+        db_user = db.query(UserDB).filter(UserDB.telegram_id == user.id).first()
+        if db_user:
+            await update.message.reply_text(f"رصيدك الحالي: {db_user.points} نقطة 🌟")
         else:
-            await update.message.reply_text('لم يتم العثور على حسابك. يرجى تسجيل الدخول في الموقع أولاً.')
+            await update.message.reply_text("لم يتم العثور على حسابك. الرجاء استخدام الأمر /start أولاً")
     finally:
         db.close()
 
 def main():
-    """Start the bot."""
-    # Get bot token from environment variable
-    bot_token = os.getenv("BOT_TOKEN", "8111627355:AAEOP-AzwPN17MAaUH_2Doel5bZxn0jXIPI")
+    """تشغيل البوت"""
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
     
-    # Create the Application and pass it your bot's token
-    application = Application.builder().token(bot_token).build()
-
-    # Add command handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("نقاط", points))
-
-    # Start the Bot
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
-
-if __name__ == '__main__':
-    main()
+    # إضافة معالجات الأوامر
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("points", points))
+    app.add_handler(CommandHandler("نقاط", points))
+    
+    # تشغيل البوت
+    app.run_polling()
