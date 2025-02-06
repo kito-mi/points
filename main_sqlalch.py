@@ -4,7 +4,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from typing import Optional
 import os
 
@@ -43,6 +43,28 @@ def get_db():
 async def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
+@app.get("/get_points")
+async def get_points(request: Request):
+    try:
+        telegram_id = request.headers.get("X-Telegram-ID")
+        if not telegram_id:
+            raise HTTPException(status_code=401, detail="يجب استخدام البوت أولاً")
+        
+        telegram_id = int(telegram_id)
+        db = SessionLocal()
+        try:
+            user = db.query(UserDB).filter(UserDB.telegram_id == telegram_id).first()
+            if not user:
+                raise HTTPException(status_code=404, detail="لم يتم العثور على المستخدم")
+            
+            return JSONResponse({"points": user.points, "name": user.first_name})
+        finally:
+            db.close()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="معرف تيليجرام غير صالح")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="حدث خطأ في معالجة الطلب")
+
 @app.post("/increment_points")
 async def increment_points(request: Request):
     try:
@@ -59,7 +81,7 @@ async def increment_points(request: Request):
             
             user.points += 1
             db.commit()
-            return {"points": user.points}
+            return JSONResponse({"points": user.points, "name": user.first_name})
         finally:
             db.close()
     except ValueError:
