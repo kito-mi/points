@@ -1,74 +1,44 @@
-from fastapi import FastAPI, Depends, HTTPException, Request, Response, Cookie
-from sqlalchemy import create_engine, Column, Integer, String, BigInteger, Boolean
+from fastapi import FastAPI, Request, Response, HTTPException, Depends, Cookie
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy import create_engine, Column, Integer, String, BigInteger
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from pydantic import BaseModel
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse, RedirectResponse
 from typing import Optional
-import hashlib
+import os
 import hmac
+import hashlib
 import time
 import json
-import os
 
-# Telegram Bot Token
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8111627355:AAEOP-AzwPN17MAaUH_2Doel5bZxn0jXIPI")
+app = FastAPI()
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
 
-# Database setup
+# قراءة المتغيرات البيئية
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./points.db")
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+
+# إعداد قاعدة البيانات
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# Models
 class UserDB(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
     telegram_id = Column(BigInteger, unique=True, index=True)
     username = Column(String, unique=True, index=True)
     first_name = Column(String)
-    last_name = Column(String, nullable=True)
+    last_name = Column(String)
     points = Column(Integer, default=0)
-    is_admin = Column(Boolean, default=False)
 
-# Create tables
 Base.metadata.create_all(bind=engine)
-
-# Pydantic models
-class TelegramUser(BaseModel):
-    id: int
-    first_name: str
-    last_name: str | None = None
-    username: str | None = None
-    photo_url: str | None = None
-    auth_date: int
-    hash: str
-
-class UserPoints(BaseModel):
-    points: int
-
-    class Config:
-        orm_mode = True
-
-# FastAPI app setup
-app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
-
-# Utility functions
-def verify_telegram_data(data: dict) -> bool:
-    """Verify Telegram login widget data"""
-    data = data.copy()
-    hash_str = data.pop('hash')
-    data_check_string = '\n'.join(f'{k}={v}' for k, v in sorted(data.items()))
-    secret_key = hashlib.sha256(BOT_TOKEN.encode()).digest()
-    hash_calc = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
-    return hash_calc == hash_str
 
 def verify_user_token(token: str) -> Optional[int]:
     """التحقق من صحة التوكن وإرجاع معرف المستخدم"""
@@ -86,7 +56,8 @@ def verify_user_token(token: str) -> Optional[int]:
             return None
             
         return telegram_id
-    except:
+    except Exception as e:
+        print(f"Token verification error: {str(e)}")  # للتشخيص
         return None
 
 # Dependency
@@ -97,19 +68,24 @@ def get_db():
     finally:
         db.close()
 
-# Routes
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request, token: Optional[str] = None):
+    print(f"Received token: {token}")  # للتشخيص
+    
     if not token:
         return templates.TemplateResponse("login.html", {"request": request})
     
     telegram_id = verify_user_token(token)
+    print(f"Verified telegram_id: {telegram_id}")  # للتشخيص
+    
     if not telegram_id:
         return templates.TemplateResponse("login.html", {"request": request})
     
     db = SessionLocal()
     try:
         user = db.query(UserDB).filter(UserDB.telegram_id == telegram_id).first()
+        print(f"Found user: {user}")  # للتشخيص
+        
         if not user:
             return templates.TemplateResponse("login.html", {"request": request})
         
@@ -117,6 +93,9 @@ async def read_root(request: Request, token: Optional[str] = None):
             "request": request,
             "user": user
         })
+    except Exception as e:
+        print(f"Database error: {str(e)}")  # للتشخيص
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         db.close()
 
