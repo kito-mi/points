@@ -4,3 +4,4 @@ sqlalchemy
 python-telegram-bot
 python-multipart
 jinja2
+psycopg2-binary
