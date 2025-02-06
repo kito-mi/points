@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام النقاط</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>نظام النقاط</h1>
+    </div>
+
+    <div class="container">
+        <div id="message" class="message" style="display: none;"></div>
+
+        <div class="points-container">
+            <h2>جمع النقاط</h2>
+            <p class="instruction">انقر على الزر أدناه لجمع النقاط!</p>
+            <p class="instruction">لمعرفة عدد نقاطك، استخدم الأمر /نقاط في بوت التيليجرام.</p>
+            <button id="incrementButton" class="btn btn-primary">انقر للحصول على نقطة!</button>
+        </div>
+    </div>
+
+    <script>
+        // عرض رسالة للمستخدم
+        function showMessage(message, type) {
+            const messageDiv = document.getElementById('message');
+            messageDiv.textContent = message;
+            messageDiv.className = `message ${type}`;
+            messageDiv.style.display = 'block';
+            setTimeout(() => {
+                messageDiv.style.display = 'none';
+            }, 3000);
+        }
+
+        // زيادة النقاط
+        async function incrementPoints() {
+            try {
+                const response = await fetch('/points/increment', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    showMessage('تم إضافة نقطة! تحقق من نقاطك باستخدام الأمر /نقاط في بوت التيليجرام', 'success');
+                } else {
+                    showMessage('حدث خطأ في إضافة النقطة', 'error');
+                }
+            } catch (error) {
+                showMessage('حدث خطأ في إضافة النقطة', 'error');
+            }
+        }
+
+        // إضافة مستمع الحدث لزر زيادة النقاط
+        document.getElementById('incrementButton').addEventListener('click', incrementPoints);
+    </script>
+</body>
+</html>
