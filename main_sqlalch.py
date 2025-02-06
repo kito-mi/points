@@ -70,6 +70,25 @@ def verify_telegram_data(data: dict) -> bool:
     hash_calc = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
     return hash_calc == hash_str
 
+def verify_user_token(token: str) -> Optional[int]:
+    """التحقق من صحة التوكن وإرجاع معرف المستخدم"""
+    try:
+        data, signature = token.rsplit(":", 1)
+        secret_key = BOT_TOKEN.encode()
+        expected_signature = hmac.new(secret_key, data.encode(), hashlib.sha256).hexdigest()
+        
+        if not hmac.compare_digest(signature, expected_signature):
+            return None
+            
+        telegram_id, timestamp = map(int, data.split(":"))
+        # التحقق من صلاحية التوكن (24 ساعة)
+        if int(time.time()) - timestamp > 24 * 60 * 60:
+            return None
+            
+        return telegram_id
+    except:
+        return None
+
 # Dependency
 def get_db():
     db = SessionLocal()
@@ -80,35 +99,47 @@ def get_db():
 
 # Routes
 @app.get("/", response_class=HTMLResponse)
-async def read_root(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
-
-@app.post("/increment_points")
-async def increment_points(request: Request):
-    telegram_id = request.headers.get("X-Telegram-ID")
+async def read_root(request: Request, token: Optional[str] = None):
+    if not token:
+        return templates.TemplateResponse("login.html", {"request": request})
+    
+    telegram_id = verify_user_token(token)
     if not telegram_id:
-        raise HTTPException(status_code=401, detail="يجب استخدام البوت أولاً")
-    
-    try:
-        telegram_id = int(telegram_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="معرف تيليجرام غير صالح")
-    
-    print(f"Received request for telegram_id: {telegram_id}")  # للتشخيص
+        return templates.TemplateResponse("login.html", {"request": request})
     
     db = SessionLocal()
     try:
         user = db.query(UserDB).filter(UserDB.telegram_id == telegram_id).first()
         if not user:
-            print(f"User not found for telegram_id: {telegram_id}")  # للتشخيص
+            return templates.TemplateResponse("login.html", {"request": request})
+        
+        return templates.TemplateResponse("index.html", {
+            "request": request,
+            "user": user
+        })
+    finally:
+        db.close()
+
+@app.post("/increment_points")
+async def increment_points(request: Request, token: Optional[str] = None):
+    if not token:
+        token = request.headers.get("X-User-Token")
+    
+    if not token:
+        raise HTTPException(status_code=401, detail="يجب تسجيل الدخول أولاً")
+    
+    telegram_id = verify_user_token(token)
+    if not telegram_id:
+        raise HTTPException(status_code=401, detail="رمز الدخول غير صالح")
+    
+    db = SessionLocal()
+    try:
+        user = db.query(UserDB).filter(UserDB.telegram_id == telegram_id).first()
+        if not user:
             raise HTTPException(status_code=404, detail="لم يتم العثور على المستخدم")
         
         user.points += 1
         db.commit()
-        print(f"Points incremented for user {user.username}, new points: {user.points}")  # للتشخيص
         return {"points": user.points}
-    except Exception as e:
-        print(f"Error processing request: {str(e)}")  # للتشخيص
-        raise HTTPException(status_code=500, detail="حدث خطأ في معالجة الطلب")
     finally:
         db.close()
