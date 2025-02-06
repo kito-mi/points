@@ -147,13 +147,31 @@ body {
 }
 
 .login-container {
-    background: white;
-    padding: 40px;
-    border-radius: 8px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    text-align: center;
     max-width: 500px;
     margin: 50px auto;
+    padding: 20px;
+    text-align: center;
+    background-color: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.login-container h1 {
+    color: #2196F3;
+    margin-bottom: 20px;
+}
+
+.login-container p {
+    color: #666;
+    margin-bottom: 30px;
+    line-height: 1.5;
+}
+
+.login-container .btn {
+    display: inline-block;
+    padding: 12px 24px;
+    font-size: 1.1em;
+    text-decoration: none;
 }
 
 .login-container h2 {
