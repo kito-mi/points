@@ -70,11 +70,16 @@ def verify_telegram_data(data: dict) -> bool:
     hash_calc = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
     return hash_calc == hash_str
 
-def get_current_user(session: Optional[str] = Cookie(None)) -> Optional[int]:
-    if not session or not session.startswith("user_"):
+def get_current_user(session: Optional[str] = Cookie(None)):
+    if not session:
         return None
+    
     try:
-        return int(session.split("_")[1])
+        session_data = json.loads(session)
+        # التحقق من صلاحية الجلسة
+        if session_data.get("exp", 0) < int(time.time()):
+            return None
+        return session_data.get("user_id")
     except:
         return None
 
@@ -88,31 +93,69 @@ def get_db():
 
 # Routes
 @app.get("/", response_class=HTMLResponse)
-async def read_root(request: Request, user_id: Optional[int] = Depends(get_current_user)):
+async def read_root(request: Request, user_id: Optional[int] = Depends(get_current_user), db: Session = Depends(get_db)):
     if not user_id:
         return templates.TemplateResponse("login.html", {"request": request})
-    return templates.TemplateResponse("index.html", {"request": request})
+    
+    user = db.query(UserDB).filter(UserDB.id == user_id).first()
+    if not user:
+        response = RedirectResponse(url="/logout")
+        return response
+    
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "user": user
+    })
 
 @app.post("/auth/telegram")
 async def telegram_auth(user: TelegramUser, response: Response, db: Session = Depends(get_db)):
-    if not verify_telegram_data(user.dict()):
-        raise HTTPException(status_code=401, detail="Invalid authentication data")
+    # التحقق من صحة البيانات
+    data_check_string = '\n'.join([
+        f'{key}={value}' for key, value in user.dict(exclude={'hash'}).items()
+        if value is not None
+    ])
     
+    secret_key = hashlib.sha256(BOT_TOKEN.encode()).digest()
+    hash_string = hmac.new(
+        secret_key,
+        data_check_string.encode(),
+        hashlib.sha256
+    ).hexdigest()
+    
+    if hash_string != user.hash:
+        raise HTTPException(status_code=400, detail="Invalid data")
+    
+    # التحقق من وجود المستخدم أو إنشاء مستخدم جديد
     db_user = db.query(UserDB).filter(UserDB.telegram_id == user.id).first()
     if not db_user:
         db_user = UserDB(
             telegram_id=user.id,
             username=user.username,
             first_name=user.first_name,
-            last_name=user.last_name,
-            points=0
+            last_name=user.last_name
         )
         db.add(db_user)
         db.commit()
         db.refresh(db_user)
     
-    response.set_cookie(key="session", value=f"user_{user.id}", httponly=True)
-    return {"success": True}
+    # إنشاء جلسة جديدة
+    session_data = {
+        "user_id": db_user.id,
+        "telegram_id": user.id,
+        "username": user.username,
+        "exp": int(time.time()) + 24 * 60 * 60  # تنتهي بعد 24 ساعة
+    }
+    session_token = json.dumps(session_data)
+    response.set_cookie(
+        key="session",
+        value=session_token,
+        httponly=True,
+        max_age=24 * 60 * 60,
+        secure=True,
+        samesite="lax"
+    )
+    
+    return RedirectResponse(url="/", status_code=303)
 
 @app.post("/logout")
 async def logout(response: Response):
