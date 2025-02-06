@@ -89,14 +89,26 @@ async def increment_points(request: Request):
     if not telegram_id:
         raise HTTPException(status_code=401, detail="يجب استخدام البوت أولاً")
     
+    try:
+        telegram_id = int(telegram_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="معرف تيليجرام غير صالح")
+    
+    print(f"Received request for telegram_id: {telegram_id}")  # للتشخيص
+    
     db = SessionLocal()
     try:
-        user = db.query(UserDB).filter(UserDB.telegram_id == int(telegram_id)).first()
+        user = db.query(UserDB).filter(UserDB.telegram_id == telegram_id).first()
         if not user:
+            print(f"User not found for telegram_id: {telegram_id}")  # للتشخيص
             raise HTTPException(status_code=404, detail="لم يتم العثور على المستخدم")
         
         user.points += 1
         db.commit()
+        print(f"Points incremented for user {user.username}, new points: {user.points}")  # للتشخيص
         return {"points": user.points}
+    except Exception as e:
+        print(f"Error processing request: {str(e)}")  # للتشخيص
+        raise HTTPException(status_code=500, detail="حدث خطأ في معالجة الطلب")
     finally:
         db.close()
