@@ -5,73 +5,62 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>نظام النقاط</title>
     <link rel="stylesheet" href="/static/style.css">
+    <script src="https://telegram.org/js/telegram-webapp.js"></script>
 </head>
 <body>
-    <div class="header">
-        <h1>نظام النقاط</h1>
-        <div class="welcome-message">مرحباً {{ user.first_name }}!</div>
-    </div>
-
     <div class="container">
-        <div id="message" class="message" style="display: none;"></div>
-
-        <div class="points-container">
-            <h2>جمع النقاط</h2>
-            <p class="instruction">انقر على الزر أدناه لجمع النقاط!</p>
-            <p class="instruction">لمعرفة عدد نقاطك، استخدم الأمر /نقاط في بوت التيليجرام.</p>
-            <button id="incrementButton" class="btn btn-primary">انقر للحصول على نقطة!</button>
+        <div id="points-container">
+            <h1>نظام النقاط</h1>
+            <div class="points-display">
+                <span>نقاطك الحالية:</span>
+                <span id="points-value">0</span>
+            </div>
+            <button id="increment-btn" class="btn btn-primary">جمع نقطة</button>
         </div>
     </div>
 
     <script>
-        // عرض رسالة للمستخدم
-        function showMessage(message, type) {
-            const messageDiv = document.getElementById('message');
-            messageDiv.textContent = message;
-            messageDiv.className = `message ${type}`;
-            messageDiv.style.display = 'block';
-            setTimeout(() => {
-                messageDiv.style.display = 'none';
-            }, 3000);
-        }
+        let tg = window.Telegram.WebApp;
+        tg.expand();
 
-        // الحصول على التوكن من الرابط
-        function getToken() {
-            const urlParams = new URLSearchParams(window.location.search);
-            return urlParams.get('token');
-        }
-
-        // زيادة النقاط
-        async function incrementPoints() {
+        document.getElementById('increment-btn').addEventListener('click', async function() {
             try {
-                const token = getToken();
-                if (!token) {
-                    showMessage('يجب تسجيل الدخول أولاً', 'error');
-                    return;
-                }
-
                 const response = await fetch('/increment_points', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-User-Token': token
+                        'X-Telegram-ID': tg.initDataUnsafe.user.id
                     }
                 });
 
-                if (response.ok) {
-                    const data = await response.json();
-                    showMessage('تم إضافة نقطة! استخدم الأمر /نقاط في البوت لمعرفة رصيدك', 'success');
-                } else {
+                if (!response.ok) {
                     const error = await response.json();
-                    showMessage(error.detail || 'حدث خطأ ما', 'error');
+                    throw new Error(error.detail || 'حدث خطأ ما');
                 }
-            } catch (error) {
-                showMessage('حدث خطأ في الاتصال', 'error');
-            }
-        }
 
-        // إضافة مستمع الحدث لزر زيادة النقاط
-        document.getElementById('incrementButton').addEventListener('click', incrementPoints);
+                const data = await response.json();
+                document.getElementById('points-value').textContent = data.points;
+                tg.showAlert('تم إضافة نقطة بنجاح! 🎉');
+            } catch (error) {
+                tg.showAlert(error.message);
+            }
+        });
+
+        // تحديث النقاط عند فتح الصفحة
+        fetch('/increment_points', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Telegram-ID': tg.initDataUnsafe.user.id
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('points-value').textContent = data.points;
+        })
+        .catch(error => {
+            console.error('Error:', error);
+        });
     </script>
 </body>
 </html>
