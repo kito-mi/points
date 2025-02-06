@@ -11,6 +11,7 @@
     <div class="header">
         <h1>نظام النقاط</h1>
         <div id="welcomeMessage" class="welcome-message"></div>
+        <div id="debug" style="display:none;"></div>
     </div>
 
     <div class="container">
@@ -25,17 +26,41 @@
     </div>
 
     <script>
+        function debugLog(message) {
+            console.log(message);
+            const debugDiv = document.getElementById('debug');
+            debugDiv.innerHTML += message + '<br>';
+        }
+
         // التأكد من تهيئة Telegram WebApp
-        if (window.Telegram && window.Telegram.WebApp) {
-            window.Telegram.WebApp.ready();
-            
-            // عرض رسالة الترحيب
-            const user = window.Telegram.WebApp.initDataUnsafe?.user;
-            if (user) {
-                const welcomeDiv = document.getElementById('welcomeMessage');
-                const name = user.first_name || user.username || 'عزيزي المستخدم';
-                welcomeDiv.textContent = `مرحباً ${name}!`;
+        debugLog('Checking Telegram WebApp...');
+        if (window.Telegram) {
+            debugLog('Telegram object exists');
+            if (window.Telegram.WebApp) {
+                debugLog('WebApp object exists');
+                window.Telegram.WebApp.ready();
+                debugLog('WebApp.ready() called');
+                
+                // عرض رسالة الترحيب
+                const webAppData = window.Telegram.WebApp.initDataUnsafe;
+                debugLog('WebApp Data: ' + JSON.stringify(webAppData));
+                
+                if (webAppData && webAppData.user) {
+                    const user = webAppData.user;
+                    debugLog('User data: ' + JSON.stringify(user));
+                    
+                    const welcomeDiv = document.getElementById('welcomeMessage');
+                    const name = user.first_name || user.username || 'عزيزي المستخدم';
+                    welcomeDiv.textContent = `مرحباً ${name}!`;
+                    debugLog('Welcome message set for: ' + name);
+                } else {
+                    debugLog('No user data found');
+                }
+            } else {
+                debugLog('WebApp object not found');
             }
+        } else {
+            debugLog('Telegram object not found');
         }
 
         // عرض رسالة للمستخدم
@@ -52,39 +77,57 @@
         // زيادة النقاط
         async function incrementPoints() {
             try {
+                debugLog('Increment points clicked');
                 // التأكد من وجود معرف المستخدم
-                const user = window.Telegram.WebApp.initDataUnsafe?.user;
-                if (!user || !user.id) {
+                const webAppData = window.Telegram.WebApp.initDataUnsafe;
+                debugLog('WebApp Data during increment: ' + JSON.stringify(webAppData));
+                
+                if (!webAppData || !webAppData.user || !webAppData.user.id) {
                     showMessage('لم نتمكن من التعرف على هويتك. يرجى استخدام البوت أولاً.', 'error');
+                    debugLog('No user data found during increment');
                     return;
                 }
 
-                console.log('Sending request with user ID:', user.id); // للتشخيص
+                const userId = webAppData.user.id;
+                debugLog('Sending request with user ID: ' + userId);
 
                 const response = await fetch('/increment_points', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-Telegram-ID': user.id.toString()
+                        'X-Telegram-ID': userId.toString()
                     }
                 });
 
                 if (response.ok) {
                     const data = await response.json();
                     showMessage('تم إضافة نقطة! استخدم الأمر /نقاط في البوت لمعرفة رصيدك', 'success');
+                    debugLog('Points incremented successfully');
                 } else {
                     const error = await response.json();
                     showMessage(error.detail || 'حدث خطأ ما', 'error');
-                    console.error('Server error:', error); // للتشخيص
+                    debugLog('Server error: ' + JSON.stringify(error));
                 }
             } catch (error) {
-                console.error('Error:', error); // للتشخيص
+                debugLog('Error: ' + error.toString());
                 showMessage('حدث خطأ في الاتصال', 'error');
             }
         }
 
         // إضافة مستمع الحدث لزر زيادة النقاط
         document.getElementById('incrementButton').addEventListener('click', incrementPoints);
+        
+        // عرض معلومات التشخيص
+        document.addEventListener('DOMContentLoaded', () => {
+            const debugDiv = document.getElementById('debug');
+            debugDiv.style.display = 'block';
+            debugDiv.style.backgroundColor = '#f5f5f5';
+            debugDiv.style.padding = '10px';
+            debugDiv.style.margin = '10px';
+            debugDiv.style.border = '1px solid #ddd';
+            debugDiv.style.direction = 'ltr';
+            debugDiv.style.textAlign = 'left';
+        });
     </script>
 </body>
 </html>
