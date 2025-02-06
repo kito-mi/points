@@ -70,19 +70,6 @@ def verify_telegram_data(data: dict) -> bool:
     hash_calc = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
     return hash_calc == hash_str
 
-def get_current_user(session: Optional[str] = Cookie(None)):
-    if not session:
-        return None
-    
-    try:
-        session_data = json.loads(session)
-        # التحقق من صلاحية الجلسة
-        if session_data.get("exp", 0) < int(time.time()):
-            return None
-        return session_data.get("user_id")
-    except:
-        return None
-
 # Dependency
 def get_db():
     db = SessionLocal()
@@ -93,98 +80,23 @@ def get_db():
 
 # Routes
 @app.get("/", response_class=HTMLResponse)
-async def read_root(request: Request, user_id: Optional[int] = Depends(get_current_user), db: Session = Depends(get_db)):
-    if not user_id:
-        return templates.TemplateResponse("login.html", {"request": request})
-    
-    user = db.query(UserDB).filter(UserDB.id == user_id).first()
-    if not user:
-        response = RedirectResponse(url="/logout")
-        return response
-    
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "user": user
-    })
+async def read_root(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
 
-@app.post("/auth/telegram")
-async def telegram_auth(user: TelegramUser, response: Response, db: Session = Depends(get_db)):
-    # التحقق من صحة البيانات
-    data_check_string = '\n'.join([
-        f'{key}={value}' for key, value in user.dict(exclude={'hash'}).items()
-        if value is not None
-    ])
+@app.post("/increment_points")
+async def increment_points(request: Request):
+    telegram_id = request.headers.get("X-Telegram-ID")
+    if not telegram_id:
+        raise HTTPException(status_code=401, detail="يجب استخدام البوت أولاً")
     
-    secret_key = hashlib.sha256(BOT_TOKEN.encode()).digest()
-    hash_string = hmac.new(
-        secret_key,
-        data_check_string.encode(),
-        hashlib.sha256
-    ).hexdigest()
-    
-    if hash_string != user.hash:
-        raise HTTPException(status_code=400, detail="Invalid data")
-    
-    # التحقق من وجود المستخدم أو إنشاء مستخدم جديد
-    db_user = db.query(UserDB).filter(UserDB.telegram_id == user.id).first()
-    if not db_user:
-        db_user = UserDB(
-            telegram_id=user.id,
-            username=user.username,
-            first_name=user.first_name,
-            last_name=user.last_name
-        )
-        db.add(db_user)
+    db = SessionLocal()
+    try:
+        user = db.query(UserDB).filter(UserDB.telegram_id == int(telegram_id)).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="لم يتم العثور على المستخدم")
+        
+        user.points += 1
         db.commit()
-        db.refresh(db_user)
-    
-    # إنشاء جلسة جديدة
-    session_data = {
-        "user_id": db_user.id,
-        "telegram_id": user.id,
-        "username": user.username,
-        "exp": int(time.time()) + 24 * 60 * 60  # تنتهي بعد 24 ساعة
-    }
-    session_token = json.dumps(session_data)
-    response.set_cookie(
-        key="session",
-        value=session_token,
-        httponly=True,
-        max_age=24 * 60 * 60,
-        secure=True,
-        samesite="lax"
-    )
-    
-    return RedirectResponse(url="/", status_code=303)
-
-@app.post("/logout")
-async def logout(response: Response):
-    response.delete_cookie(key="session")
-    return {"success": True}
-
-# Points management routes
-@app.get("/points/", response_model=UserPoints)
-async def get_points(db: Session = Depends(get_db), user_id: Optional[int] = Depends(get_current_user)):
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    
-    user = db.query(UserDB).filter(UserDB.telegram_id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    return {"points": user.points}
-
-@app.post("/points/increment", response_model=UserPoints)
-async def increment_points(db: Session = Depends(get_db), user_id: Optional[int] = Depends(get_current_user)):
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    
-    user = db.query(UserDB).filter(UserDB.telegram_id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    user.points += 1
-    db.commit()
-    db.refresh(user)
-    
-    return {"points": user.points}
+        return {"points": user.points}
+    finally:
+        db.close()
