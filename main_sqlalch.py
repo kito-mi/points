@@ -4,12 +4,21 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 import os
 
 # إنشاء تطبيق FastAPI
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # يمكن تحديد النطاقات المسموح بها هنا
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # إعداد قاعدة البيانات
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./points.db")
@@ -33,6 +42,23 @@ class UserDB(Base):
 
 # إنشاء جداول قاعدة البيانات
 Base.metadata.create_all(bind=engine)
+
+# إضافة وظيفة لتسجيل المستخدمين الجدد بناءً على telegram_id
+async def register_user(telegram_id: int):
+    db = SessionLocal()
+    user = db.query(UserDB).filter(UserDB.telegram_id == telegram_id).first()
+    if not user:
+        user = UserDB(telegram_id=telegram_id)
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    return user
+
+# إضافة وظيفة لاسترجاع بيانات المستخدم بناءً على telegram_id
+async def get_user_data(telegram_id: int):
+    db = SessionLocal()
+    user = db.query(UserDB).filter(UserDB.telegram_id == telegram_id).first()
+    return user
 
 @app.get("/")
 async def read_root(request: Request):
