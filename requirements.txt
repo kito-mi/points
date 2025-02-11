@@ -1,0 +1,7 @@
+# متطلبات المشروع الثابت
+fastapi==0.95.1
+uvicorn==0.22.0
+python-multipart==0.0.6
+jinja2==3.1.2
+python-jose==3.3.0
+passlib==1.7.4
